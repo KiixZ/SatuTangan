@@ -1,0 +1,162 @@
+import { useEffect, useState, useMemo } from 'react'
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table'
+import { Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  DataTable,
+  DataTablePagination,
+  DataTableToolbar,
+} from '@/components/data-table'
+import { campaignsApi } from '../data/campaigns-api'
+import { campaignsColumns } from './campaigns-columns'
+import { useCampaigns } from './campaigns-provider'
+
+export function CampaignsTable() {
+  const context = useCampaigns()
+  const campaigns = context?.campaigns || []
+  const setCampaigns = context?.setCampaigns || (() => {})
+  const isLoading = context?.isLoading || false
+  const setIsLoading = context?.setIsLoading || (() => {})
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  useEffect(() => {
+    fetchCampaigns()
+  }, [statusFilter, categoryFilter])
+
+  const fetchCampaigns = async () => {
+    setIsLoading(true)
+    try {
+      const params: any = {
+        limit: 100, // Get all campaigns for now
+      }
+
+      if (statusFilter !== 'all') {
+        params.status = statusFilter
+      }
+
+      if (categoryFilter !== 'all') {
+        params.category_id = categoryFilter
+      }
+
+      const result = await campaignsApi.getAllCampaigns(params)
+      setCampaigns(result.data || [])
+    } catch (error) {
+      console.error('Fetch campaigns error:', error)
+      toast.error('Failed to fetch campaigns')
+      setCampaigns([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSearch = () => {
+    if (!searchQuery.trim()) {
+      return
+    }
+
+    const filtered = (campaigns || []).filter(
+      (campaign) =>
+        campaign.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        campaign.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+
+    setCampaigns(filtered || [])
+  }
+
+  const handleClearSearch = () => {
+    setSearchQuery('')
+    fetchCampaigns()
+  }
+
+  const tableData = useMemo(() => {
+    console.log('campaigns value:', campaigns)
+    console.log('campaigns type:', typeof campaigns)
+    console.log('campaigns isArray:', Array.isArray(campaigns))
+    return Array.isArray(campaigns) ? campaigns : []
+  }, [campaigns])
+
+  const table = useReactTable({
+    data: tableData,
+    columns: campaignsColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+
+  return (
+    <div className='space-y-4'>
+      <div className='flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4'>
+        <div className='flex flex-1 items-center gap-2'>
+          <Input
+            placeholder='Search campaigns...'
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className='flex-1 sm:max-w-sm'
+          />
+          <Button
+            onClick={handleSearch}
+            size='icon'
+            variant='outline'
+            className='shrink-0'
+          >
+            <Search className='h-4 w-4' />
+          </Button>
+          {searchQuery && (
+            <Button
+              onClick={handleClearSearch}
+              variant='ghost'
+              size='sm'
+              className='shrink-0'
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className='w-full sm:w-[180px]'>
+            <SelectValue placeholder='Filter by status' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='all'>All Status</SelectItem>
+            <SelectItem value='DRAFT'>Draft</SelectItem>
+            <SelectItem value='ACTIVE'>Active</SelectItem>
+            <SelectItem value='COMPLETED'>Completed</SelectItem>
+            <SelectItem value='SUSPENDED'>Suspended</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className='-mx-4 overflow-x-auto sm:mx-0'>
+        <div className='inline-block min-w-full px-4 align-middle sm:px-0'>
+          <DataTable
+            table={table}
+            columns={campaignsColumns}
+            isLoading={isLoading}
+          />
+        </div>
+      </div>
+      <DataTablePagination table={table} />
+    </div>
+  )
+}

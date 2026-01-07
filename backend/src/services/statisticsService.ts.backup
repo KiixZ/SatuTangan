@@ -1,0 +1,83 @@
+import { DatabaseService } from "./databaseService";
+import { RowDataPacket } from "mysql2";
+
+interface StatisticsData extends RowDataPacket {
+  total_campaigns: number;
+  total_donors: number;
+  total_funds: number;
+}
+
+class StatisticsService {
+  private db: DatabaseService;
+
+  constructor() {
+    this.db = new DatabaseService();
+  }
+
+  async getPlatformStatistics() {
+    try {
+      console.log("=== FETCHING PLATFORM STATISTICS ===");
+
+      // Get total active campaigns
+      const campaignResult = await this.db.query<RowDataPacket>(
+        `SELECT COUNT(*) as total FROM campaigns WHERE status = 'ACTIVE'`,
+      );
+      const totalCampaigns = (campaignResult[0] as any).total || 0;
+      console.log("Total active campaigns:", totalCampaigns);
+
+      // Get campaign breakdown by status
+      const campaignStatusResult = await this.db.query<RowDataPacket>(
+        `SELECT status, COUNT(*) as count FROM campaigns GROUP BY status`,
+      );
+      console.log("Campaign status breakdown:", campaignStatusResult);
+
+      // Get total unique donors (based on successful donations)
+      const donorResult = await this.db.query<RowDataPacket>(
+        `SELECT COUNT(DISTINCT donor_email) as total
+         FROM donations
+         WHERE status = 'SUCCESS'`,
+      );
+      const totalDonors = (donorResult[0] as any).total || 0;
+      console.log("Total donors:", totalDonors);
+
+      // Check total donations by status
+      const donationStatusResult = await this.db.query<RowDataPacket>(
+        `SELECT status, COUNT(*) as count, SUM(amount) as total_amount FROM donations GROUP BY status`,
+      );
+      console.log("Donation status breakdown:", donationStatusResult);
+
+      // Get total funds disbursed (completed withdrawals)
+      const fundsResult = await this.db.query<RowDataPacket>(
+        `SELECT COALESCE(SUM(amount), 0) as total
+         FROM withdrawals
+         WHERE status = 'COMPLETED'`,
+      );
+      const totalFunds = parseFloat((fundsResult[0] as any).total) || 0;
+      console.log("Total disbursed funds:", totalFunds);
+
+      // Check withdrawal breakdown by status
+      const withdrawalStatusResult = await this.db.query<RowDataPacket>(
+        `SELECT status, COUNT(*) as count, SUM(amount) as total_amount FROM withdrawals GROUP BY status`,
+      );
+      console.log("Withdrawal status breakdown:", withdrawalStatusResult);
+
+      console.log("=== STATISTICS RESULT ===");
+      console.log({
+        totalCampaigns,
+        totalDonors,
+        totalFunds,
+      });
+
+      return {
+        totalCampaigns,
+        totalDonors,
+        totalFunds,
+      };
+    } catch (error: any) {
+      console.error("Get platform statistics error:", error);
+      throw error;
+    }
+  }
+}
+
+export default new StatisticsService();
